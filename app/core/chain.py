@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
@@ -23,6 +24,14 @@ prompt = ChatPromptTemplate.from_messages([
 
 def _get_llm():
     settings = get_settings()
+
+    if settings.use_ollama:
+        return ChatOllama(
+            model=settings.llm_model,
+            base_url=settings.ollama_base_url,
+            temperature=0,
+        )
+
     if settings.use_azure:
         return AzureChatOpenAI(
             azure_endpoint=settings.azure_openai_endpoint,
@@ -31,6 +40,7 @@ def _get_llm():
             azure_deployment=settings.azure_openai_deployment,
             temperature=0,
         )
+
     return ChatOpenAI(
         api_key=settings.openai_api_key,
         model=settings.llm_model,

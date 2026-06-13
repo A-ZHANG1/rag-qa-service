@@ -3,6 +3,9 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
+    # Provider: "ollama" (default, free local), "openai", or "azure"
+    llm_provider: str = "ollama"
+
     # OpenAI
     openai_api_key: str = ""
 
@@ -13,8 +16,11 @@ class Settings(BaseSettings):
     azure_openai_api_version: str = "2024-02-01"
 
     # Model settings
-    llm_model: str = "gpt-4o"
-    embedding_model: str = "text-embedding-3-small"
+    llm_model: str = "llama3.2"
+    embedding_model: str = "nomic-embed-text"
+
+    # Ollama
+    ollama_base_url: str = "http://localhost:11434"
 
     # ChromaDB
     chroma_persist_dir: str = "./chroma_db"
@@ -26,7 +32,11 @@ class Settings(BaseSettings):
 
     @property
     def use_azure(self) -> bool:
-        return bool(self.azure_openai_api_key and self.azure_openai_endpoint)
+        return self.llm_provider == "azure"
+
+    @property
+    def use_ollama(self) -> bool:
+        return self.llm_provider == "ollama"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
