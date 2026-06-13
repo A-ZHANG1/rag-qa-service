@@ -2,31 +2,38 @@
 
 import os
 import glob
-from langchain_community.document_loaders import (
-    TextLoader,
-    UnstructuredMarkdownLoader,
-)
+from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 from app.config import get_settings
 from app.core.vectorstore import get_vectorstore
 
 
+def _load_markdown(file_path: str) -> list[Document]:
+    """Load a markdown file as a Document."""
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return [Document(page_content=content, metadata={"source": file_path})]
+
+
 LOADER_MAP = {
     ".txt": TextLoader,
-    ".md": UnstructuredMarkdownLoader,
+    ".md": _load_markdown,
 }
 
 
 def load_documents(docs_dir: str = "docs"):
     """Load all supported documents from the docs directory."""
     documents = []
-    for ext, loader_cls in LOADER_MAP.items():
+    for ext, loader in LOADER_MAP.items():
         pattern = os.path.join(docs_dir, f"**/*{ext}")
         for file_path in glob.glob(pattern, recursive=True):
             print(f"Loading: {file_path}")
             try:
-                loader = loader_cls(file_path)
-                documents.extend(loader.load())
+                if callable(loader) and not isinstance(loader, type):
+                    documents.extend(loader(file_path))
+                else:
+                    documents.extend(loader(file_path).load())
             except Exception as e:
                 print(f"Error loading {file_path}: {e}")
     return documents
