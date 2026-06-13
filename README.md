@@ -35,8 +35,8 @@ A production-style RAG (Retrieval-Augmented Generation) question answering servi
 | Language | Python 3.11+ |
 | Web Framework | FastAPI |
 | LLM Orchestration | LangChain |
-| LLM | OpenAI GPT-4o / Azure OpenAI |
-| Embedding | text-embedding-3-small |
+| LLM | Ollama (local, free) / OpenAI / Azure OpenAI |
+| Embedding | nomic-embed-text (Ollama) / text-embedding-3-small (OpenAI) |
 | Vector Store | ChromaDB |
 | Observability | OpenTelemetry |
 | Containerization | Docker |
@@ -47,7 +47,7 @@ A production-style RAG (Retrieval-Augmented Generation) question answering servi
 ### Prerequisites
 
 - Python 3.11+
-- OpenAI API key
+- [Ollama](https://ollama.com/) installed (default, free, no API key needed)
 
 ### Local Development
 
@@ -55,6 +55,10 @@ A production-style RAG (Retrieval-Augmented Generation) question answering servi
 # Clone the repo
 git clone https://github.com/A-ZHANG1/rag-qa-service.git
 cd rag-qa-service
+
+# Pull Ollama models (free, runs locally)
+ollama pull llama3.2
+ollama pull nomic-embed-text
 
 # Create virtual environment
 python -m venv .venv
@@ -66,7 +70,8 @@ pip install -r requirements.txt
 
 # Set environment variables
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Default config uses Ollama — no API key needed!
+# Edit .env to switch to OpenAI or Azure OpenAI if desired
 
 # Ingest documents
 python -m app.core.ingest
@@ -81,18 +86,42 @@ uvicorn app.main:app --reload --port 8000
 docker-compose up --build
 ```
 
+### Interactive API Docs (Swagger UI)
+
+Once the server is running, open **http://localhost:8000/docs** for the interactive Swagger UI:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/chat` | POST | RAG question answering (returns JSON with answer + sources) |
+| `/api/v1/chat/stream` | POST | Streaming RAG with Server-Sent Events |
+| `/api/v1/health` | GET | Health check |
+
 ### API Usage
 
 ```bash
 # Basic query
-curl -X POST http://localhost:8000/chat \
+curl -X POST http://localhost:8000/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"query": "What is MLflow?"}'
 
 # Streaming response
-curl -X POST http://localhost:8000/chat/stream \
+curl -X POST http://localhost:8000/api/v1/chat/stream \
   -H "Content-Type: application/json" \
   -d '{"query": "What is MLflow?"}'
+```
+
+### Example Response
+
+```json
+{
+  "answer": "MLflow is an open-source platform for managing the end-to-end machine learning lifecycle. It provides four main components: MLflow Tracking, MLflow Models, MLflow Model Registry, and MLflow Projects.",
+  "sources": [
+    {
+      "content": "# MLflow Overview\n\nMLflow is an open-source platform for managing the end-to-end...",
+      "source": "docs/mlflow-overview.md"
+    }
+  ]
+}
 ```
 
 ## Project Structure
