@@ -2,6 +2,18 @@
 
 A production-style RAG (Retrieval-Augmented Generation) question answering service built with FastAPI, LangChain, and ChromaDB.
 
+## Motivation / 为什么做这个
+
+**问题**：团队/个人的知识散落在 Markdown 文档、wiki、笔记里，找一个具体答案往往要翻好几个文件、花几分钟；而通用 ChatGPT 既不知道你的私有文档、又可能"一本正经地编"。
+
+**这个服务解决什么**：把你自己的文档喂进去，用 RAG 让 LLM **只基于你的文档**回答、并**给出出处**——把"翻文档找答案"从几分钟压到几秒，答案可溯源、可控。
+
+**目标用户**：需要对私有/领域文档做问答的团队（内部知识库、客服 FAQ、技术文档助手）。
+
+**为什么做成 production 级**：RAG 是当下 LLM 落地最主流的形态；把「数据→检索→生成→评估→上线→监控」端到端跑通，比堆 SOTA 更能体现工程能力。演进计划见 [ROADMAP.md](ROADMAP.md)，关键取舍见 [docs/adr/](docs/adr/)。
+
+**非目标（Non-goals）**：不追求超大规模（>1M 向量另论，见 ADR-0001）；不做模型训练（用开箱/可微调组件）；不做多租户/权限（可作为后续扩展）。
+
 ## Architecture
 
 ```

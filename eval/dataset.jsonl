@@ -1,0 +1,5 @@
+{"question": "What is MLflow?", "ground_truth": "MLflow is an open-source platform for managing the end-to-end machine learning lifecycle, with components including Tracking, Models, Model Registry, and Projects."}
+{"question": "What are the main components of MLflow?", "ground_truth": "MLflow Tracking, MLflow Models, MLflow Model Registry, and MLflow Projects."}
+{"question": "What is Retrieval-Augmented Generation?", "ground_truth": "RAG combines a retrieval step that fetches relevant documents from a knowledge base with a generation step where an LLM produces an answer grounded in those documents."}
+{"question": "How does chunk size affect retrieval quality?", "ground_truth": "Chunk size trades off context completeness against retrieval noise: too large adds noise and wastes tokens, too small breaks semantic units and loses context."}
+{"question": "Who won the 2018 FIFA World Cup?", "ground_truth": "This is not covered by the knowledge base; the system should honestly say it does not have that information rather than guessing."}
