@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Ollama
     ollama_base_url: str = "http://localhost:11434"
 
+    # SEC EDGAR (fair-access policy requires a descriptive User-Agent)
+    sec_user_agent: str = ""
+
     # ChromaDB
     chroma_persist_dir: str = "./chroma_db"
     collection_name: str = "knowledge_base"

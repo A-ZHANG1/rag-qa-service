@@ -12,6 +12,7 @@
 
 - [x] README 加 **Motivation / 问题陈述**（谁用、解决什么问题、为什么值得做）
 - [x] `docs/adr/` 建 **架构决策记录（ADR）**：向量库、chunking、LLM/embedding 选型的取舍
+- [x] **可插拔数据源连接器**（`app/sources/`：local / sec / arxiv）——一套 RAG 核心、多域复用，见 ADR-0004
 - [ ] 补充 ADR：为什么用 LangChain（vs 直接调 API / LlamaIndex）
 - [ ] 在 README 写清**非目标（Non-goals）**：不做什么、边界在哪
 

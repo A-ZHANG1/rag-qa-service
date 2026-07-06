@@ -1,0 +1,4 @@
+{"question": "What business segments does the company report in this filing?", "ground_truth": "Tailor to the ingested filing (e.g., Apple reports iPhone, Mac, iPad, Wearables/Home/Accessories, and Services)."}
+{"question": "What key risk factors does the company disclose?", "ground_truth": "Tailor to the ingested filing's Risk Factors section (e.g., supply-chain concentration, competition, macroeconomic conditions, legal/regulatory risk)."}
+{"question": "How does the company describe its revenue recognition policy?", "ground_truth": "Tailor to the ingested filing's significant accounting policies section."}
+{"question": "What is the capital of France?", "ground_truth": "Out of scope for a company's SEC filing; the system should decline rather than guess."}

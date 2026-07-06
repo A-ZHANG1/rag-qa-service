@@ -1,0 +1,4 @@
+{"question": "What problem does retrieval-augmented generation aim to solve?", "ground_truth": "RAG grounds LLM answers in retrieved external documents to reduce hallucination and add up-to-date or domain-specific knowledge the model was not trained on."}
+{"question": "How does RAG differ from fine-tuning for adding knowledge to an LLM?", "ground_truth": "RAG adds knowledge at inference time via retrieval (cheap to update, provides citations); fine-tuning encodes knowledge in weights (costly to update, no source attribution)."}
+{"question": "What techniques improve retrieval quality in RAG systems?", "ground_truth": "Better chunking, hybrid keyword+vector search, query rewriting, and re-ranking retrieved passages with a cross-encoder."}
+{"question": "Who directed the movie Titanic?", "ground_truth": "Out of scope for an arXiv ML paper corpus; the system should say it does not have that information instead of guessing."}

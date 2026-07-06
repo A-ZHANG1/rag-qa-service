@@ -8,11 +8,18 @@ A production-style RAG (Retrieval-Augmented Generation) question answering servi
 
 **这个服务解决什么**：把你自己的文档喂进去，用 RAG 让 LLM **只基于你的文档**回答、并**给出出处**——把"翻文档找答案"从几分钟压到几秒，答案可溯源、可控。
 
-**目标用户**：需要对私有/领域文档做问答的团队（内部知识库、客服 FAQ、技术文档助手）。
+**一套核心，多个数据域（组件复用）**：RAG 管道（chunk → embed → 检索 → 生成 → 评估 → 监控）与领域无关；领域差异被隔离到可插拔的**数据源连接器**（`app/sources/`）。内置：
+- `sec` — SEC EDGAR 财报（10-K/10-Q…）问答，做"财报研究助手"
+- `arxiv` — arXiv 论文问答，做"论文速读助手"
+- `local` — 本地 Markdown/txt 文档
+
+加一个新域 = 加一个连接器，其余零改动（见 [ADR-0004](docs/adr/0004-pluggable-data-source-connectors.md)）。
+
+**目标用户**：需要对某个域的公开资料做**可溯源问答**的人（投资研究、论文速读、文档助手）。
 
 **为什么做成 production 级**：RAG 是当下 LLM 落地最主流的形态；把「数据→检索→生成→评估→上线→监控」端到端跑通，比堆 SOTA 更能体现工程能力。演进计划见 [ROADMAP.md](ROADMAP.md)，关键取舍见 [docs/adr/](docs/adr/)。
 
-**非目标（Non-goals）**：不追求超大规模（>1M 向量另论，见 ADR-0001）；不做模型训练（用开箱/可微调组件）；不做多租户/权限（可作为后续扩展）。
+**非目标（Non-goals）**：不追求超大规模（见 ADR-0001）；不做模型训练（用开箱/可微调组件）；不做多租户/权限（后续扩展）；**不做"预测涨跌/投资建议"这类玩具**——只做可溯源的信息检索问答。
 
 ## Architecture
 
@@ -85,8 +92,10 @@ cp .env.example .env
 # Default config uses Ollama — no API key needed!
 # Edit .env to switch to OpenAI or Azure OpenAI if desired
 
-# Ingest documents
-python -m app.core.ingest
+# Ingest documents — 选一个数据源（可插拔连接器）
+python -m app.core.ingest --source local                                                              # 本地 docs/
+python -m app.core.ingest --source arxiv --query "retrieval augmented generation" --max-results 30    # arXiv 论文
+python -m app.core.ingest --source sec --ticker AAPL --form 10-K --max-results 3                       # SEC 财报（先在 .env 配 SEC_USER_AGENT）
 
 # Start the server
 uvicorn app.main:app --reload --port 8000

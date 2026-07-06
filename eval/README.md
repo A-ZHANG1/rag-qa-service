@@ -39,3 +39,5 @@ python -m eval.run_eval          # 跑评估
 - [ ] 扩充数据集到 ≥20 条（含边界 case）
 - [ ] 把 eval 接进 CI，PR 时跑 mini-eval，防止改动让质量退化
 - [ ] 对比不同 `chunk_size` / `top_k` / 模型的指标，用数字驱动调参
+
+> **多数据域**：`eval/datasets/` 下按域放数据集（`arxiv.jsonl`、`sec.jsonl`）。`ground_truth` 必须对应你**实际 ingest 的内容**（SEC/arXiv 模板需按拉到的具体文档修订）。
