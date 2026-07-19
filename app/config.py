@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
 
+    # Agent mode: web search tool (pluggable, see docs/adr/0006)
+    web_search_provider: str = "duckduckgo"  # "duckduckgo" (free, default) or "tavily"
+    web_search_max_results: int = 5
+    web_search_timeout_s: float = 10.0
+    tavily_api_key: str = ""
+
+    # Agent mode: supervisor routing/loop guards (see docs/adr/0005)
+    agent_rag_distance_threshold: float = 0.35  # ChromaDB L2 distance; ABOVE this -> trigger web_search
+    agent_max_steps: int = 4
+
     @property
     def use_azure(self) -> bool:
         return self.llm_provider == "azure"
