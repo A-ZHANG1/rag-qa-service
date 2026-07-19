@@ -224,7 +224,7 @@ pytest tests/ -v
   ├── [Format Context]      2ms   context_length=2800 chars
   └── [LLM Generate]     2.1s    model=llama3.2, tokens_in=850, tokens_out=230
 
-[POST /api/v1/agent]  总耗时 5.1s   (Agent 模式，多步决策)
+[POST /api/v1/chat/agent]  总耗时 5.1s   (Agent 模式，多步决策；规划中，见 ROADMAP)
   ├── [LLM Reason #1]    1.2s    decision: "use rag_search"
   ├── [RAG Search]        0.3s    query: "MLflow components", results=4
   ├── [LLM Reason #2]    1.5s    decision: "use web_search"
