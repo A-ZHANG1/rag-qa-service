@@ -13,14 +13,16 @@
 - [x] README 加 **Motivation / 问题陈述**（谁用、解决什么问题、为什么值得做）
 - [x] `docs/adr/` 建 **架构决策记录（ADR）**：向量库、chunking、LLM/embedding 选型的取舍
 - [x] **可插拔数据源连接器**（`app/sources/`：local / sec / arxiv）——一套 RAG 核心、多域复用，见 ADR-0004
+- [x] **RAG Agent 模式**（`app/agents/`：`rag_search` + `web_search` 督导者+专职子Agent架构，本地知识库不够时自动补充网络搜索，且 web 失败会优雅降级而非报错），见 [ADR-0005](docs/adr/0005-rag-agent-supervisor-pattern.md)、[ADR-0006](docs/adr/0006-web-search-provider-choice.md)
 - [ ] 补充 ADR：为什么用 LangChain（vs 直接调 API / LlamaIndex）
 - [ ] 在 README 写清**非目标（Non-goals）**：不做什么、边界在哪
 
 ## Phase 1 · 端到端 production
 
 - [~] **Eval 骨架**（`eval/`，基于 RAGAS：faithfulness / answer relevancy / context precision & recall）
-- [ ] 扩充 eval 数据集到 ≥20 条有代表性的问答（含边界 case：知识库里没有的问题）
-- [ ] **监控**：把现有 OpenTelemetry 追踪聚合成指标——p50/p99 延迟、token 成本、检索命中率
+- [ ] 扩充 eval 数据集到 ≥20 条有代表性的问答（含边界 case：知识库里没有的问题、需要联网才能回答的问题）
+- [x] **基础可观测性**：`app/core/telemetry.py` 提供 OpenTelemetry span 埋点（零配置 console exporter，设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 可切换到真实 collector），Agent workflow 每个节点（`rag_specialist`/`supervisor_route`/`web_specialist`/`synthesis`）都有对应 span
+- [ ] **监控**：把 span 数据聚合成指标——p50/p99 延迟、token 成本、检索命中率、`degraded` 触发频率
 - [ ] 把线上 query/answer 落库，供离线评估（形成"评估闭环"）
 - [ ] **CI**：GitHub Actions 跑 lint + pytest；可选跑一次 mini-eval
 - [ ] 部署故事：README 写清如何部署（Docker）+ 环境变量 + 扩缩容思路

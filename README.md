@@ -42,8 +42,9 @@ A production-style RAG (Retrieval-Augmented Generation) question answering servi
 ## Features
 
 - **RAG Pipeline**: Document loading → chunking → embedding → vector store → retrieval → generation
+- **Agent Mode**: Supervisor + specialist LangGraph workflow that falls back to live web search when local docs are insufficient, degrading gracefully instead of failing (see [ADR-0005](docs/adr/0005-rag-agent-supervisor-pattern.md))
 - **REST API**: FastAPI with streaming (SSE) support
-- **Observability**: OpenTelemetry tracing for full request lifecycle
+- **Observability**: OpenTelemetry tracing for full request lifecycle (zero-config console exporter by default)
 - **Containerized**: Docker + docker-compose for one-command startup
 - **Tested**: pytest with unit and integration tests
 
@@ -115,6 +116,7 @@ Once the server is running, open **http://localhost:8000/docs** for the interact
 |----------|--------|-------------|
 | `/api/v1/chat` | POST | RAG question answering (returns JSON with answer + sources) |
 | `/api/v1/chat/stream` | POST | Streaming RAG with Server-Sent Events |
+| `/api/v1/chat/agent` | POST | Agent-mode RAG: supervisor routes between local retrieval and live web search when local docs are insufficient, degrading gracefully if web search fails (returns answer + sources + `degraded` + `agent_trace`) |
 | `/api/v1/health` | GET | Health check |
 
 ### API Usage
@@ -150,22 +152,28 @@ curl -X POST http://localhost:8000/api/v1/chat/stream \
 ```
 rag-qa-service/
 ├── app/
-│   ├── main.py              # FastAPI application entry
+│   ├── main.py              # FastAPI application entry (calls setup_telemetry() at startup)
 │   ├── config.py             # Configuration management
 │   ├── core/
 │   │   ├── embeddings.py     # Embedding model setup
 │   │   ├── vectorstore.py    # ChromaDB vector store
 │   │   ├── retriever.py      # Document retrieval
 │   │   ├── chain.py          # RAG chain composition
-│   │   └── ingest.py         # Document ingestion pipeline
+│   │   ├── ingest.py         # Document ingestion pipeline
+│   │   └── telemetry.py      # OpenTelemetry tracing setup (console exporter by default)
+│   ├── agents/
+│   │   ├── rag_tools.py       # rag_search / web_search tools (never raise, see ADR-0005/0006)
+│   │   └── rag_workflow.py   # Supervisor + specialist LangGraph workflow (Agent mode)
 │   └── api/
 │       ├── routes.py         # API route definitions
 │       └── models.py         # Pydantic request/response models
 ├── tests/
 │   ├── test_retriever.py     # Retriever unit tests
 │   ├── test_chain.py         # Chain unit tests
-│   └── test_api.py           # API integration tests
+│   ├── test_api.py           # API integration tests
+│   └── test_rag_workflow.py  # Agent workflow tests (3 key paths + edge cases)
 ├── docs/                     # Knowledge base documents
+│   └── adr/                  # Architecture decision records
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -185,21 +193,24 @@ pytest tests/ -v
 
 ### 纯 RAG vs Agent 模式
 
-本项目目前实现了纯 RAG 模式，后续将加入 Agent 模式。两者的核心区别：
+本项目实现了两种模式：纯 RAG（`/api/v1/chat`）和 Agent 模式（`/api/v1/chat/agent`，见 [ADR-0005](docs/adr/0005-rag-agent-supervisor-pattern.md)）。两者的核心区别：
 
 | | 纯 RAG | Agent |
 |---|---|---|
-| **流程** | 检索 → 生成（单轮，固定管道） | 思考 → 选工具 → 执行 → 再思考（多轮循环） |
-| **能力边界** | 只能回答知识库里有的内容 | 可以联网搜索、调 API、做计算，突破知识库限制 |
-| **复杂问题** | 无法拆解，一次检索定成败 | 自动拆解为多步，逐步收集信息再综合回答 |
-| **速度** | 快（1-3秒） | 慢（可能 5-15秒，多轮推理） |
-| **可控性** | 高，行为可预测 | 低，LLM 自主决策，可能走弯路 |
-| **适用场景** | FAQ、文档问答、客服 | 复杂分析、多源信息整合、需要推理的任务 |
+| **流程** | 检索 → 生成（单轮，固定管道） | 督导者（supervisor）路由到专职子 Agent，按需综合多个来源 |
+| **能力边界** | 只能回答知识库里有的内容 | 本地知识库不够时自动触发网络搜索，突破知识库限制 |
+| **复杂问题** | 无法拆解，一次检索定成败 | RAG 专职 Agent 先查本地，不够再交给 Web 专职 Agent |
+| **速度** | 快（1-3秒） | 慢（可能 5-15秒，取决于是否触发 web_search） |
+| **可控性** | 高，行为可预测 | 中——路由决策基于 ChromaDB 检索距离阈值（`agent_rag_distance_threshold`），而非 LLM 自由决策，可预测性介于纯 RAG 和自由 ReAct 循环之间 |
+| **适用场景** | FAQ、文档问答、客服 | 复杂分析、多源信息整合、需要联网补充最新信息的任务 |
+| **失败处理** | 检索失败即返回空结果 | web_search 失败会优雅降级为纯 RAG 答案（`degraded: true`），而非报错——见 [ADR-0005](docs/adr/0005-rag-agent-supervisor-pattern.md) |
 
 **具体示例**——用户问："MLflow 3.0 比 2.0 有什么改进？我该怎么迁移？"
 
 - **纯 RAG**：检索知识库，如果文档里只有 MLflow 概述没有版本对比，就无法准确回答
-- **Agent**：第1步用 `rag_search` 查本地知识库 → 发现信息不够 → 第2步用 `web_search` 搜索 MLflow 3.0 changelog → 第3步综合两个来源生成完整的对比分析和迁移建议
+- **Agent**：`rag_specialist` 查本地知识库 → 检索距离超过阈值，判定信息不够 → `web_specialist` 搜索 MLflow 3.0 changelog → `synthesis` 综合两个来源生成完整的对比分析和迁移建议，并标注每条结论来自本地文档还是网络搜索
+
+**为什么不是单一 ReAct 循环，而是督导者 + 专职子 Agent**：`rag_specialist` 和 `web_specialist` 各自独立、互不影响——`web_specialist` 超时或搜索失败不会导致整个请求失败，`synthesis` 节点始终会基于已有信息给出回答（并诚实告知用户信息可能不完整），这是本项目对"多 Agent 协作如何保证一定有结果返回"这一设计问题的具体实践，详见 ADR-0005。
 
 ### 为什么用 OpenTelemetry 而不是 MLflow 做可观测性？
 
@@ -215,27 +226,21 @@ pytest tests/ -v
 **在本项目中**：
 - 我们**不训练模型**，所以 MLflow 的实验追踪不适用
 - 我们需要观察的是：一次 RAG/Agent 请求里，检索耗时多少、LLM 推理耗时多少、Agent 做了几步决策
-- 这正是 OpenTelemetry 的强项——它能生成这样的调用链：
+- `app/core/telemetry.py` 提供开箱即用的 OpenTelemetry 集成：默认用 `ConsoleSpanExporter` 零配置打印 span（无需额外部署 collector），设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 环境变量即可切换到真实的 collector（Jaeger/Tempo 等）
+- Agent 模式（`app/agents/rag_workflow.py`）的每个节点都包一层 span，调用链的**节点名称和属性字段**已通过测试验证真实生成（见 `tests/test_rag_workflow.py`），具体耗时取决于实际使用的模型和网络状况：
 
 ```
-[POST /api/v1/chat]  总耗时 2.3s
-  ├── [Embed Query]       120ms   input: "What is MLflow?"
-  ├── [ChromaDB Search]    45ms   top_k=4, results=4
-  ├── [Format Context]      2ms   context_length=2800 chars
-  └── [LLM Generate]     2.1s    model=llama3.2, tokens_in=850, tokens_out=230
-
-[POST /api/v1/chat/agent]  总耗时 5.1s   (Agent 模式，多步决策；规划中，见 ROADMAP)
-  ├── [LLM Reason #1]    1.2s    decision: "use rag_search"
-  ├── [RAG Search]        0.3s    query: "MLflow components", results=4
-  ├── [LLM Reason #2]    1.5s    decision: "use web_search"
-  ├── [Web Search]        0.8s    query: "MLflow 3.0 new features"
-  └── [LLM Final]        1.3s    decision: "answer ready", tokens_out=450
+[chat_agent]
+  ├── [rag_specialist]      attrs: success=true, min_distance=0.42, num_results=2
+  ├── [supervisor_route]    attrs: decision="trigger_web_search"
+  ├── [web_specialist]      attrs: success=true, num_results=3
+  └── [synthesis]           attrs: degraded=false, num_sources=5
 ```
 
 基于这些数据，我们可以做出优化决策：
-- 如果 LLM 推理占 90% 耗时 → 考虑用更小的模型或加缓存
-- 如果检索结果质量差 → 调整 chunking 策略或加 reranker
-- 如果 Agent 循环过多 → 优化 prompt 让 LLM 更高效地选择工具
+- 如果 `synthesis` 占大部分耗时 → 考虑用更小的模型或加缓存（见 [CS229S 学习笔记](https://github.com/A-ZHANG1/interview-prep) 里 KV cache / prompt caching 相关内容）
+- 如果 `rag_specialist` 的 `min_distance` 长期偏高（检索质量差）→ 调整 chunking 策略或加 reranker（见 ROADMAP Phase 2）
+- 如果 `web_specialist` 频繁触发 `degraded=true` → 检查 DuckDuckGo 限流情况，评估是否切换到 Tavily（见 [ADR-0006](docs/adr/0006-web-search-provider-choice.md)）
 
 ## License
 
