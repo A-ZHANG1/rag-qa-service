@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -19,3 +21,25 @@ class ChatResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     version: str
+
+
+class AgentSourceDoc(BaseModel):
+    origin: str = Field(..., description="Where this source came from: 'rag' or 'web'")
+    source: str = Field(..., description="File path (rag) or URL (web) of the source")
+    content: str
+
+
+class AgentChatResponse(BaseModel):
+    answer: str
+    sources: list[AgentSourceDoc]
+    degraded: bool = Field(
+        ...,
+        description=(
+            "True when the web specialist was needed but failed/timed out, so the "
+            "answer had to fall back to local-docs-only context."
+        ),
+    )
+    agent_trace: list[dict[str, Any]] = Field(
+        ...,
+        description="Ordered per-step decision log (rag_specialist/web_specialist/synthesis).",
+    )
