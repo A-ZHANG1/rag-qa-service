@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from app.api.routes import router
+from app.core.telemetry import setup_telemetry
+
+setup_telemetry()
 
 app = FastAPI(
     title="RAG QA Service",

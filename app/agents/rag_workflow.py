@@ -31,8 +31,10 @@ from langgraph.graph.state import CompiledStateGraph
 from app.agents.rag_tools import rag_search, web_search
 from app.config import get_settings
 from app.core.chain import _get_llm
+from app.core.telemetry import get_tracer
 
 _logger = logging.getLogger(__name__)
+_tracer = get_tracer(__name__)
 
 _SYNTHESIS_SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions using retrieved context.
 
@@ -85,7 +87,11 @@ class AgentState(TypedDict):
 
 def _rag_specialist(state: AgentState) -> AgentState:
     """Search the local knowledge base. Always the first node to run."""
-    result = rag_search(state["question"])
+    with _tracer.start_as_current_span("rag_specialist") as span:
+        result = rag_search(state["question"])
+        span.set_attribute("success", result["success"])
+        span.set_attribute("min_distance", result.get("min_distance") or -1.0)
+        span.set_attribute("num_results", len(result.get("results", [])))
     trace = [
         *state["trace"],
         {
@@ -111,9 +117,12 @@ def _route_after_rag(state: AgentState) -> Literal["web_specialist", "synthesis"
         return "synthesis"
     rag_result = state["rag_result"]
     assert rag_result is not None, "_route_after_rag called before _rag_specialist"
-    if not rag_result["success"] or rag_result["min_distance"] > settings.agent_rag_distance_threshold:
-        return "web_specialist"
-    return "synthesis"
+    with _tracer.start_as_current_span("supervisor_route") as span:
+        if not rag_result["success"] or rag_result["min_distance"] > settings.agent_rag_distance_threshold:
+            span.set_attribute("decision", "trigger_web_search")
+            return "web_specialist"
+        span.set_attribute("decision", "local_docs_sufficient")
+        return "synthesis"
 
 
 def _web_specialist(state: AgentState) -> AgentState:
@@ -123,7 +132,12 @@ def _web_specialist(state: AgentState) -> AgentState:
     ``app.agents.rag_tools.web_search``'s contract) and the ``degraded`` flag
     is set so synthesis can fall back to RAG-only instead of crashing.
     """
-    result = web_search(state["question"])
+    with _tracer.start_as_current_span("web_specialist") as span:
+        result = web_search(state["question"])
+        span.set_attribute("success", result["success"])
+        span.set_attribute("num_results", len(result.get("results", [])))
+        if not result["success"]:
+            span.set_attribute("error", result.get("error", ""))
     trace = [
         *state["trace"],
         {"step": "web_specialist", "success": result["success"], "error": result.get("error")},
@@ -182,13 +196,16 @@ def _synthesis(state: AgentState) -> AgentState:
     degraded_note = _DEGRADED_NOTE if state["degraded"] else ""
     system_prompt = _SYNTHESIS_SYSTEM_PROMPT.format(degraded_note=degraded_note)
 
-    llm = _get_llm()
-    response = llm.invoke(
-        [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=f"Context:\n{context}\n\nQuestion: {state['question']}"),
-        ]
-    )
+    with _tracer.start_as_current_span("synthesis") as span:
+        span.set_attribute("degraded", state["degraded"])
+        span.set_attribute("num_sources", len(rag_sources) + len(web_sources))
+        llm = _get_llm()
+        response = llm.invoke(
+            [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=f"Context:\n{context}\n\nQuestion: {state['question']}"),
+            ]
+        )
     trace = [*state["trace"], {"step": "synthesis", "degraded": state["degraded"]}]
     return {
         **state,
@@ -242,18 +259,21 @@ def run_agent(question: str) -> dict[str, Any]:
     :param question: The user's question.
     :returns: ``{"answer": str, "sources": [...], "degraded": bool, "trace": [...]}``.
     """
-    graph = get_agent_graph()
-    initial_state: AgentState = {
-        "question": question,
-        "rag_result": None,
-        "web_result": None,
-        "step_count": 0,
-        "trace": [],
-        "answer": "",
-        "sources": [],
-        "degraded": False,
-    }
-    final_state = graph.invoke(initial_state)
+    with _tracer.start_as_current_span("chat_agent") as span:
+        span.set_attribute("question_length", len(question))
+        graph = get_agent_graph()
+        initial_state: AgentState = {
+            "question": question,
+            "rag_result": None,
+            "web_result": None,
+            "step_count": 0,
+            "trace": [],
+            "answer": "",
+            "sources": [],
+            "degraded": False,
+        }
+        final_state = graph.invoke(initial_state)
+        span.set_attribute("degraded", final_state["degraded"])
     return {
         "answer": final_state["answer"],
         "sources": final_state["sources"],
